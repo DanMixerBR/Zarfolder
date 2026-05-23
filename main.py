@@ -772,7 +772,7 @@ class FileOrganizerApp(ctk.CTk):
                 if os.path.exists(script_path):
                     if self.is_windows:
                         subprocess.Popen(
-                            ["cmd.exe", "/c", "start", "", f"update.{s_ext}", str(os.getpid())],
+                            ["cmd.exe", "/c", "start", "", script_path, str(os.getpid())],
                             cwd=base_dir,
                             stdin=subprocess.DEVNULL,
                             stdout=subprocess.DEVNULL,
