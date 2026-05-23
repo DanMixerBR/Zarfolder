@@ -771,7 +771,15 @@ class FileOrganizerApp(ctk.CTk):
                 
                 if os.path.exists(script_path):
                     if self.is_windows:
-                        subprocess.Popen(['cmd.exe', '/c', script_path], creationflags=0x00000010)
+                        subprocess.Popen(
+                            ["cmd.exe", "/c", "start", "", f"update.{s_ext}", str(os.getpid())],
+                            cwd=base_dir,
+                            stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            close_fds=True,
+                            creationflags=0x00000010
+                        )
                     else:
                         os.chmod(script_path, 0o755) 
                         limpo_env = os.environ.copy()
