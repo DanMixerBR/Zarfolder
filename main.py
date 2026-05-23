@@ -6,6 +6,7 @@ import json
 import hashlib
 import zipfile
 import threading
+import queue
 import webbrowser
 import requests
 import stat
@@ -140,6 +141,9 @@ class FileOrganizerApp(ctk.CTk):
         self.version = self.get_local_version()
         self.is_updating = False
         self.loading_window = None 
+        self.operation_running = False
+        self.SIMULATION_PREVIEW_LIMIT = 5000
+        self.ui_queue = queue.Queue() 
         
         self.load_config()
         ctk.set_appearance_mode(self.current_theme)
@@ -181,6 +185,7 @@ class FileOrganizerApp(ctk.CTk):
 
         self.build_ui()
         self.update_texts() 
+        self.process_ui_queue()
         
         if not self.is_windows:
             self.bind_all("<Button-4>", lambda e: e.widget.event_generate("<MouseWheel>", delta=1))
@@ -217,19 +222,63 @@ class FileOrganizerApp(ctk.CTk):
     
     def apply_modal_fix(self, modal_win):
         def on_unmap(e):
-            if e.widget is self and modal_win.winfo_exists():
-                modal_win.grab_release()
+            try:
+                if e.widget is self and modal_win.winfo_exists():
+                    modal_win.grab_release()
+            except tk.TclError:
+                pass
 
         def on_map(e):
-            if e.widget is self and modal_win.winfo_exists():
-                modal_win.grab_set()
+            try:
+                if e.widget is self and modal_win.winfo_exists():
+                    modal_win.grab_set()
+            except tk.TclError:
+                pass
 
-        self.bind("<Unmap>", on_unmap, add="+")
-        self.bind("<Map>", on_map, add="+")
+        id_unmap = self.bind("<Unmap>", on_unmap, add="+")
+        id_map = self.bind("<Map>", on_map, add="+")
+
+        def on_destroy(e):
+            if e.widget is modal_win:
+                try:
+                    self.unbind("<Unmap>", id_unmap)
+                    self.unbind("<Map>", id_map)
+                except tk.TclError:
+                    pass
+
+        modal_win.bind("<Destroy>", on_destroy, add="+")
     
     def safe_ui(self, func, *args, **kwargs):
-        if self.winfo_exists():
-            self.after(0, lambda: func(*args, **kwargs))
+        self.ui_queue.put((func, args, kwargs))
+
+    def process_ui_queue(self):
+        try:
+            while True:
+                func, args, kwargs = self.ui_queue.get_nowait()
+                try:
+                    if self.winfo_exists():
+                        func(*args, **kwargs)
+                except tk.TclError:
+                    pass
+        except queue.Empty:
+            pass
+
+        try:
+            if self.winfo_exists():
+                self.after(50, self.process_ui_queue)
+        except tk.TclError:
+            pass
+
+    def begin_operation(self):
+        if self.operation_running:
+            messagebox.showwarning("Warning", "Another operation is already running.")
+            return False
+        self.operation_running = True
+        return True
+
+    def finish_operation(self):
+        self.operation_running = False
+        self.hide_loading()
 
     def show_loading(self, title_key, message_key):
         t = LANGS[self.current_lang]
@@ -539,6 +588,9 @@ class FileOrganizerApp(ctk.CTk):
         self.safe_ui(messagebox.showerror, "Update Error", error_msg, parent=parent_win)
 
     def start_github_update(self):
+        if self.operation_running:
+            messagebox.showwarning("Warning", "Please wait for the current operation to finish.")
+            return
         self.btn_update_app.configure(state="disabled", text="Checking...")
         self.is_updating = True 
         self.update_progress.pack(fill="x", pady=(0, 10))
@@ -839,27 +891,90 @@ class FileOrganizerApp(ctk.CTk):
 
     def _force_rmdir(self, dir_path):
         try:
-            if not os.listdir(dir_path): 
-                os.chmod(dir_path, stat.S_IWRITE) 
-                os.rmdir(dir_path) 
-        except: pass
+            if os.path.isdir(dir_path) and not os.listdir(dir_path):
+                os.chmod(dir_path, stat.S_IWRITE)
+                os.rmdir(dir_path)
+                return True
+        except Exception:
+            pass
+
+        return False
 
     def remove_empty_folders(self, path, remove_root=False):
+        removed_dirs = []
+
         if not os.path.exists(path):
-            return
-            
+            return removed_dirs
+
         for root, dirs, files in os.walk(path, topdown=False):
             for dir_name in dirs:
-                self._force_rmdir(os.path.join(root, dir_name))
-        
+                dir_path = os.path.join(root, dir_name)
+
+                if self._force_rmdir(dir_path):
+                    removed_dirs.append(dir_path)
+
         if remove_root:
-            self._force_rmdir(path)
+            if self._force_rmdir(path):
+                removed_dirs.append(path)
+
+        return removed_dirs
 
     def snapshot_dirs(self, src):
         dir_set = set()
         for root, dirs, files in os.walk(src):
             for d in dirs: dir_set.add(os.path.join(root, d))
         return dir_set
+
+    def iter_files(self, src):
+        for root, dirs, files in os.walk(src):
+            for file in files:
+                yield os.path.join(root, file)
+
+    def ensure_dir(self, path, created_dirs=None):
+        if os.path.isdir(path):
+            return
+
+        dirs_to_create = []
+        current = path
+
+        while current and not os.path.exists(current):
+            dirs_to_create.append(current)
+            parent = os.path.dirname(current)
+
+            if parent == current:
+                break
+
+            current = parent
+
+        os.makedirs(path, exist_ok=True)
+
+        if created_dirs is not None:
+            created_dirs.extend(reversed(dirs_to_create))
+
+    def hash_file_partial(self, filepath, block_size=1024 * 1024):
+        file_size = os.path.getsize(filepath)
+        hasher = hashlib.sha256()
+        hasher.update(str(file_size).encode("utf-8"))
+
+        with open(filepath, "rb") as f:
+            first_block = f.read(block_size)
+            hasher.update(first_block)
+
+            if file_size > block_size:
+                f.seek(max(file_size - block_size, 0))
+                last_block = f.read(block_size)
+                hasher.update(last_block)
+
+        return hasher.hexdigest()
+
+    def hash_file_full(self, filepath, chunk_size=1024 * 1024):
+        hasher = hashlib.sha256()
+
+        with open(filepath, "rb") as f:
+            for chunk in iter(lambda: f.read(chunk_size), b""):
+                hasher.update(chunk)
+
+        return hasher.hexdigest()
 
     # ==========================================
     # PREVENÇÃO DE COLISÃO DE ARQUIVOS 
@@ -883,57 +998,86 @@ class FileOrganizerApp(ctk.CTk):
     # ==========================================
     def start_find_duplicates(self):
         src = self.source_folder.get()
-        if not os.path.exists(src): return
+        if not os.path.exists(src):
+            return
+
+        if not self.begin_operation():
+            return
+
         self.show_loading("load_title", "load_dupes")
         threading.Thread(target=self._task_find_duplicates, args=(src,), daemon=True).start()
 
     def _task_find_duplicates(self, src):
         dupes_folder = os.path.join(src, "Duplicates")
         moved = 0
-        
+
         try:
-            # ETAPA 1: Agrupar arquivos por tamanho exato (Muito rápido, lê apenas metadados)
             size_dict = {}
+
             for root, _, files in os.walk(src):
-                if root.startswith(dupes_folder): continue
+                try:
+                    if os.path.commonpath([root, dupes_folder]) == dupes_folder:
+                        continue
+                except ValueError:
+                    pass
+
                 for file in files:
                     filepath = os.path.join(root, file)
+
                     try:
                         size = os.path.getsize(filepath)
-                        if size not in size_dict:
-                            size_dict[size] = []
-                        size_dict[size].append(filepath)
-                    except: pass
-            
-            # ETAPA 2: Ler o "DNA" (Hash) APENAS dos arquivos que possuem o mesmo tamanho
-            hashes = {}
+                        size_dict.setdefault(size, []).append(filepath)
+                    except Exception:
+                        pass
+
+            partial_groups = {}
+
             for size, file_paths in size_dict.items():
-                if len(file_paths) > 1: # Só entra aqui se tiver arquivos suspeitos de serem iguais
-                    for filepath in file_paths:
-                        file_hash = hashlib.md5()
-                        try:
-                            with open(filepath, "rb") as f:
-                                # Chunk aumentado de 4096 (4KB) para 65536 (64KB) para leitura mais rápida do HD/SSD
-                                for chunk in iter(lambda: f.read(65536), b""): 
-                                    file_hash.update(chunk)
-                            h = file_hash.hexdigest()
-                            
-                            if h in hashes:
-                                if not os.path.exists(dupes_folder): os.makedirs(dupes_folder)
-                                
-                                file = os.path.basename(filepath)
-                                safe_path = self.get_unique_path(dupes_folder, file, filepath)
-                                self.force_move(filepath, safe_path)
-                                moved += 1
-                            else: 
-                                hashes[h] = filepath
-                        except: pass
+                if len(file_paths) < 2:
+                    continue
+
+                for filepath in file_paths:
+                    try:
+                        partial_hash = self.hash_file_partial(filepath)
+                        partial_groups.setdefault((size, partial_hash), []).append(filepath)
+                    except Exception:
+                        pass
+
+            for _, file_paths in partial_groups.items():
+                if len(file_paths) < 2:
+                    continue
+
+                full_hashes = {}
+
+                for filepath in file_paths:
+                    try:
+                        full_hash = self.hash_file_full(filepath)
+
+                        if full_hash in full_hashes:
+                            if not os.path.exists(dupes_folder):
+                                os.makedirs(dupes_folder, exist_ok=True)
+
+                            file = os.path.basename(filepath)
+                            safe_path = self.get_unique_path(dupes_folder, file, filepath)
+                            self.force_move(filepath, safe_path)
+                            moved += 1
+                        else:
+                            full_hashes[full_hash] = filepath
+
+                    except Exception:
+                        pass
+
         finally:
-            self.safe_ui(self.hide_loading)
+            self.safe_ui(self.finish_operation)
             self.safe_ui(messagebox.showinfo, "Duplicatas", LANGS[self.current_lang]["msg_dupes"].format(moved))
 
     def start_undo_last_action(self):
-        if not os.path.exists(self.undo_file): return
+        if not os.path.exists(self.undo_file):
+            return
+
+        if not self.begin_operation():
+            return
+
         self.show_loading("load_title", "load_undo")
         threading.Thread(target=self._task_undo_last_action, daemon=True).start()
 
@@ -965,75 +1109,98 @@ class FileOrganizerApp(ctk.CTk):
 
             os.remove(self.undo_file)
         finally:
-            self.safe_ui(self.hide_loading)
+            self.safe_ui(self.finish_operation)
             self.safe_ui(lambda: self.after(200, lambda: messagebox.showinfo("Undo", LANGS[self.current_lang]["msg_undo"].format(restored))))
 
     def start_execute_rules(self, simulate=False):
         src = self.source_folder.get()
-        if not os.path.exists(src): return
-        
-        has_rules = any(r["val"].get().strip() and r["dest"].get().strip() for r in self.rules)
-        has_auto = any([self.chk_type_var.get(), self.chk_date_c_var.get(), self.chk_date_m_var.get(), self.chk_size_var.get(), self.chk_name_var.get()])
-        
-        if not has_rules and not has_auto:
-            t = LANGS[self.current_lang]
-            messagebox.showwarning("Warning", "Please select at least one automatic classification option or define a rule.")
+        if not os.path.exists(src):
             return
 
-        if simulate: self.show_loading("load_title", "load_sim")
-        else: self.show_loading("load_title", "load_org")
-            
-        threading.Thread(target=self._task_execute_rules, args=(src, simulate), daemon=True).start()
-
-    def _task_execute_rules(self, src, simulate):
-        t = LANGS[self.current_lang]
         active_rules = []
-        
-        # Pega as regras exatamente na ordem em que o usuário as criou na tela
+
         for r in self.rules:
             val = r["val"].get().strip()
             folder_name = r["dest"].get().strip()
+
             if val and folder_name:
                 clean_folder = "".join(c for c in folder_name if c not in r'\/:*?"<>|')
-                if clean_folder: active_rules.append({"key": r["current_key"], "val": val, "dest": clean_folder})
+                if clean_folder:
+                    active_rules.append({
+                        "key": r["current_key"],
+                        "val": val,
+                        "dest": clean_folder
+                    })
 
-        has_auto = any([self.chk_type_var.get(), self.chk_date_c_var.get(), self.chk_date_m_var.get(), self.chk_size_var.get(), self.chk_name_var.get()])
-        
+        auto_opts = {
+            "type": self.chk_type_var.get(),
+            "date_c": self.chk_date_c_var.get(),
+            "date_m": self.chk_date_m_var.get(),
+            "size": self.chk_size_var.get(),
+            "name": self.chk_name_var.get()
+        }
+
+        has_auto = any(auto_opts.values())
+
         if not active_rules and not has_auto:
-            self.safe_ui(self.hide_loading)
+            messagebox.showwarning("Warning", "Please select at least one automatic classification option or define a rule.")
             return
 
-        files_to_process = []
-        for root, dirs, files in os.walk(src):
-            for file in files: files_to_process.append(os.path.join(root, file))
+        if not self.begin_operation():
+            return
+
+        if simulate:
+            self.show_loading("load_title", "load_sim")
+        else:
+            self.show_loading("load_title", "load_org")
+
+        threading.Thread(
+            target=self._task_execute_rules,
+            args=(src, simulate, active_rules, auto_opts),
+            daemon=True
+        ).start()
+
+    def _task_execute_rules(self, src, simulate, active_rules, auto_opts):
+        t = LANGS[self.current_lang]
+        has_auto = any(auto_opts.values())
+        file_iterator = self.iter_files(src)
 
         moved_count = 0
         sim_moves = [] 
-        moves_dict = {}
+        sim_moves_limit = self.SIMULATION_PREVIEW_LIMIT
 
-        if not simulate and os.path.exists(self.undo_file): os.remove(self.undo_file)
-        dirs_before = self.snapshot_dirs(src) if not simulate else set()
+        def add_sim_move(file_name, destination):
+            if len(sim_moves) < sim_moves_limit:
+                sim_moves.append((file_name, destination))
+
+        moves_dict = {}
+        created_dirs = []
+
+        if not simulate and os.path.exists(self.undo_file):
+            os.remove(self.undo_file)
 
         try:
-            for filepath in files_to_process:
+            for filepath in file_iterator:
                 if not os.path.exists(filepath): continue
                 
                 file = os.path.basename(filepath)
+                file_lower = file.lower()
+                file_root, ext = os.path.splitext(file)
+                ext = ext.lower()
+                base_name = file_root.lower()
                 
                 # === NOVA LÓGICA DE REGRAS EM CASCATA ===
                 final_dest = None # Guarda a decisão final
                 
                 for rule in active_rules:
                     match = False
-                    ext = os.path.splitext(file)[1].lower()
-                    base_name = os.path.splitext(file)[0].lower()
                     rule_val = rule["val"].lower()
                     
                     if rule["key"] == "ext" and ext == rule_val: match = True
                     elif rule["key"] == "ext_not" and ext != rule_val: match = True
                     
-                    elif rule["key"] == "name" and rule_val in file.lower(): match = True
-                    elif rule["key"] == "name_not" and rule_val not in file.lower(): match = True
+                    elif rule["key"] == "name" and rule_val in file_lower: match = True
+                    elif rule["key"] == "name_not" and rule_val not in file_lower: match = True
                     elif rule["key"] == "name_starts" and base_name.startswith(rule_val): match = True
                     elif rule["key"] == "name_ends" and base_name.endswith(rule_val): match = True
                     elif rule["key"] == "name_exact" and base_name == rule_val: match = True
@@ -1083,15 +1250,19 @@ class FileOrganizerApp(ctk.CTk):
                     dest_folder = os.path.join(src, final_dest)
                     safe_new_path = self.get_unique_path(dest_folder, file, filepath)
                     
-                    if simulate: sim_moves.append((file, safe_new_path))
+                    if simulate: 
+                        add_sim_move(file, safe_new_path)
+                        if len(sim_moves) >= sim_moves_limit:
+                            break
                     else:
                         if filepath != safe_new_path: 
-                            if not os.path.exists(dest_folder): os.makedirs(dest_folder)
                             try:
+                                self.ensure_dir(dest_folder, created_dirs)
                                 self.force_move(filepath, safe_new_path)
                                 moves_dict[safe_new_path] = filepath
                                 moved_count += 1
-                            except: pass
+                            except:
+                                pass
                             
                     # Se caiu em uma regra manual, o loop "continue" pula a Classificação Automática!
                     continue 
@@ -1100,49 +1271,65 @@ class FileOrganizerApp(ctk.CTk):
                 # CLASSIFICAÇÃO AUTOMÁTICA (Só age se NENHUMA regra manual pegou o arquivo)
                 if has_auto:
                     sub_paths = []
-                    if self.chk_type_var.get(): sub_paths.append(self.get_file_type(file))
-                    
-                    # AJUSTE AQUI: Usamos [:7] para pegar apenas "AAAA-MM" para o nome da pasta
-                    if self.chk_date_c_var.get(): sub_paths.append(self.get_creation_date(filepath)[:7])
-                    if self.chk_date_m_var.get(): sub_paths.append(self.get_modification_date(filepath)[:7])
-                    
-                    if self.chk_size_var.get(): sub_paths.append(self.get_size_category(filepath))
-                    if self.chk_name_var.get(): sub_paths.append(self.get_name_category(file))
+                    if auto_opts["type"]:
+                        sub_paths.append(self.get_file_type(file))
+
+                    if auto_opts["date_c"]:
+                        sub_paths.append(self.get_creation_date(filepath)[:7])
+
+                    if auto_opts["date_m"]:
+                        sub_paths.append(self.get_modification_date(filepath)[:7])
+
+                    if auto_opts["size"]:
+                        sub_paths.append(self.get_size_category(filepath))
+
+                    if auto_opts["name"]:
+                        sub_paths.append(self.get_name_category(file))
 
                     target_path = os.path.join(src, *sub_paths)
                     safe_new_path = self.get_unique_path(target_path, file, filepath)
                     
-                    if simulate: sim_moves.append((file, safe_new_path))
+                    if simulate: 
+                        add_sim_move(file, safe_new_path)
+                        if len(sim_moves) >= sim_moves_limit:
+                            break
                     else:
                         if filepath != safe_new_path:
-                            if not os.path.exists(target_path): os.makedirs(target_path)
                             try:
+                                self.ensure_dir(target_path, created_dirs)
                                 self.force_move(filepath, safe_new_path)
                                 moves_dict[safe_new_path] = filepath
                                 moved_count += 1
-                            except: pass
+                            except:
+                                pass
 
             if simulate:
                 self.safe_ui(self._generate_tree_and_finish, src, sim_moves)
             else:
-                self.remove_empty_folders(src)
-                dirs_after = self.snapshot_dirs(src)
-                
-                created_dirs = list(dirs_after - dirs_before)
-                deleted_dirs = list(dirs_before - dirs_after)
-                
-                log_data = {"moves": moves_dict, "created_dirs": created_dirs, "deleted_dirs": deleted_dirs}
+                removed_dirs = self.remove_empty_folders(src)
+
+                created_dirs_set = set(created_dirs)
+                deleted_dirs = [d for d in removed_dirs if d not in created_dirs_set]
+
+                created_dirs = list(dict.fromkeys(created_dirs))
+                deleted_dirs = list(dict.fromkeys(deleted_dirs))
+
+                log_data = {
+                    "moves": moves_dict,
+                    "created_dirs": created_dirs,
+                    "deleted_dirs": deleted_dirs
+                }
                 with open(self.undo_file, "w") as f: json.dump(log_data, f)
                     
-                self.safe_ui(self.hide_loading)
+                self.safe_ui(self.finish_operation)
                 self.safe_ui(lambda: self.after(200, lambda: messagebox.showinfo("Success", t["msg_success"].format(moved_count))))
                 
         except Exception as e:
-            self.safe_ui(self.hide_loading)
+            self.safe_ui(self.finish_operation)
             print(f"Erro Crítico: {e}")
 
     def _generate_tree_and_finish(self, src, sim_moves):
-        self.hide_loading()
+        self.finish_operation()
         self.after(200, lambda: self._show_simulation_tree(src, sim_moves))
 
     # ==========================================
