@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo_z.png" alt="CopynDown Logo" width="150">
+  <img src="assets/logo_original.png" alt="CopynDown Logo" width="150">
   <h1>Zarfolder</h1>
   <p>
     <a href="https://github.com/DanMixerBR/Zarfolder/releases/latest"><img src="https://img.shields.io/badge/version-1.0.3-orange.svg?style=for-the-badge"></a>
