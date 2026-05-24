@@ -35,7 +35,7 @@ COLOR_BORDER = ("#9CA3AF", "#404040")
 BTN_HOVER = ("#D1D5DB", "#404040") 
 TEXT_MAIN = ("#111827", "#e0e0e0")
 TEXT_MUTED = ("#6B7280", "#8a8a8a")    
-ORANGE_MAIN = ("#d35400", "#d35400")   
+ORANGE_MAIN = ("#ff9f43", "#c96a1b")   
 ORANGE_HOVER = ("#e67e22", "#e67e22")  
 
 # ==========================================
@@ -331,7 +331,7 @@ class FileOrganizerApp(ctk.CTk):
             except Exception as e:
                 print(f"Warning: Failed to load logo.png: {e}")
 
-        self.lbl_title = ctk.CTkLabel(title_frame, text="", font=("Segoe UI", 20, "bold"), text_color=ORANGE_MAIN)
+        self.lbl_title = ctk.CTkLabel(title_frame, text="", font=("Segoe UI", 20, "bold"), text_color=TEXT_MAIN)
         self.lbl_title.pack(side="left")
         self.lbl_sub = ctk.CTkLabel(title_frame, text="", font=("Segoe UI", 12), text_color=TEXT_MUTED)
         self.lbl_sub.pack(side="left", padx=(10, 0), pady=(10, 0))
