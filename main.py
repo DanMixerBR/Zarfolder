@@ -407,7 +407,7 @@ class FileOrganizerApp(ctk.CTk):
         self.btn_undo = ctk.CTkButton(bottom_frame, text="", height=45, corner_radius=10, fg_color=BG_INPUT, text_color=TEXT_MAIN, hover_color=BTN_HOVER, command=self.start_undo_last_action)
         self.btn_undo.pack(side="left")
 
-        self.btn_run = ctk.CTkButton(bottom_frame, text="", width=160, height=45, corner_radius=10, font=("Segoe UI", 14, "bold"), fg_color=ORANGE_MAIN, hover_color=ORANGE_HOVER, command=lambda: self.start_execute_rules(simulate=False))
+        self.btn_run = ctk.CTkButton(bottom_frame, text="", width=160, height=45, corner_radius=10, font=("Segoe UI", 14, "bold"), text_color="white", fg_color=ORANGE_MAIN, hover_color=ORANGE_HOVER, command=lambda: self.start_execute_rules(simulate=False))
         self.btn_run.pack(side="right")
 
         self.btn_sim = ctk.CTkButton(bottom_frame, text="", width=120, height=45, corner_radius=10, font=("Segoe UI", 14), fg_color=BG_INPUT, text_color=TEXT_MAIN, hover_color=BTN_HOVER, command=lambda: self.start_execute_rules(simulate=True))
@@ -541,7 +541,7 @@ class FileOrganizerApp(ctk.CTk):
                 json.dump({"lang": self.current_lang, "theme": self.current_theme}, f)
             set_win.destroy()
 
-        ctk.CTkButton(set_win, text="Save", fg_color=ORANGE_MAIN, hover_color=ORANGE_HOVER, command=save_settings).pack(pady=30)
+        ctk.CTkButton(set_win, text="Save", font=("Segoe UI", 12, "bold"), text_color="white", fg_color=ORANGE_MAIN, hover_color=ORANGE_HOVER, command=save_settings).pack(pady=30)
 
     def show_about(self):
         self.about_win = ctk.CTkToplevel(self)
