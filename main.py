@@ -576,7 +576,7 @@ class FileOrganizerApp(ctk.CTk):
         btn_frame.pack(pady=15)
 
         ctk.CTkButton(btn_frame, text="GitHub", fg_color=BG_INPUT, text_color=TEXT_MAIN, hover_color=BTN_HOVER, width=120, command=lambda: webbrowser.open_new("https://github.com/DanMixerBR/Zarfolder")).pack(side="left", padx=10)
-        self.btn_update_app = ctk.CTkButton(btn_frame, text=LANGS[self.current_lang].get("btn_update", "Check for updates"), width=150, command=self.start_github_update, fg_color=ORANGE_MAIN, hover_color=ORANGE_HOVER)
+        self.btn_update_app = ctk.CTkButton(btn_frame, text=LANGS[self.current_lang].get("btn_update", "Check for updates"), width=150, command=self.start_github_update, font=("Segoe UI", 12, "bold"), text_color="white", fg_color=ORANGE_MAIN, hover_color=ORANGE_HOVER)
         self.btn_update_app.pack(side="left", padx=10)
 
     def handle_update_failure(self, error_msg):
