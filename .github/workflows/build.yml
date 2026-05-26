@@ -67,8 +67,7 @@ jobs:
           
           # 3. Copiar os Assets e Gerar o version.txt na pasta core/bin
           Copy-Item -Path bin\translations.py -Destination release\core\bin\
-          Copy-Item -Path assets\logo.png -Destination release\core\bin\icons\
-          Copy-Item -Path assets\icon.ico -Destination release\core\bin\icons\
+          Copy-Item -Path assets\icon.ico -Destination release\core\bin\icons\icon.ico
           $CLEAN_V = ("${{ github.event.inputs.versao_tag }}" -replace '[A-Za-z]', '')
           Set-Content -Path release\core\bin\version.txt -Value $CLEAN_V
           
@@ -96,8 +95,7 @@ jobs:
           
           # 3. Copiar os Assets e Gerar o version.txt
           cp bin/translations.py release/core/bin/
-          cp assets/logo.png release/core/bin/icons/
-          cp assets/icon.png release/core/bin/icons/ 2>/dev/null || true
+          cp assets/icon.png release/core/bin/icons/icon.png 2>/dev/null || true
           echo "${{ github.event.inputs.versao_tag }}" | tr -d 'A-Za-z' > release/core/bin/version.txt
           
           # 4. Adicionar o script de instalação Linux e Zipar
