@@ -54,7 +54,7 @@ jobs:
           $CLEAN_V = ("${{ github.event.inputs.versao_tag }}" -replace '[A-Za-z]', '').Trim('.') + ".0"
           # 1. Nuitka gera o binário do app dentro da pasta main.dist
           python -m nuitka --assume-yes-for-downloads --standalone --windows-console-mode=disable `
-          --enable-plugin=tk-inter --windows-icon-from-ico="assets/icon.ico" `
+          --enable-plugin=pyside6 --windows-icon-from-ico="assets/icon.ico" `
           --company-name="DanMixerBR" --product-name="Zarfolder" `
           --file-description="Zarfolder" --copyright="MIT License" `
           --file-version="$CLEAN_V" --product-version="$CLEAN_V" `
@@ -87,7 +87,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           # 1. Nuitka gera o binário nativo Linux dentro de main.dist
-          python -m nuitka --assume-yes-for-downloads --standalone --disable-ccache --enable-plugin=tk-inter -o Zarfolder main.py
+          python -m nuitka --assume-yes-for-downloads --standalone --disable-ccache --enable-plugin=pyside6 -o Zarfolder main.py
           
           # 2. Estruturar a pasta Release e core/bin
           mkdir -p release/core/bin
