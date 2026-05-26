@@ -60,13 +60,12 @@ jobs:
           --file-version="$CLEAN_V" --product-version="$CLEAN_V" `
           --output-filename=Zarfolder.exe main.py
           
-          # 2. Estruturar a pasta Release e a Subpasta core/bin
-          New-Item -ItemType Directory -Path release\core\bin
+          # 2. Estruturar a pasta Release
           Move-Item -Path main.dist\* -Destination release\core
           Remove-Item main.dist
           
           # 3. Copiar os Assets e Gerar o version.txt na pasta core/bin
-          Copy-Item -Path bin\translations.py -Destination release\core\bin\
+          Copy-Item -Path bin\* -Destination release\core\bin -Recurse
           Copy-Item -Path assets\icon.ico -Destination release\core\bin\icons\icon.ico
           $CLEAN_V = ("${{ github.event.inputs.versao_tag }}" -replace '[A-Za-z]', '')
           Set-Content -Path release\core\bin\version.txt -Value $CLEAN_V
@@ -89,12 +88,11 @@ jobs:
           python -m nuitka --assume-yes-for-downloads --standalone --disable-ccache --enable-plugin=pyside6 -o Zarfolder main.py
           
           # 2. Estruturar a pasta Release e core/bin
-          mkdir -p release/core/bin
           mv main.dist/* release/core/
           rm -rf main.dist
           
           # 3. Copiar os Assets e Gerar o version.txt
-          cp bin/translations.py release/core/bin/
+          cp -r bin/* release/core/bin/
           cp assets/icon.png release/core/bin/icons/icon.png 2>/dev/null || true
           echo "${{ github.event.inputs.versao_tag }}" | tr -d 'A-Za-z' > release/core/bin/version.txt
           
