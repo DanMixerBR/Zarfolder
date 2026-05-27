@@ -672,6 +672,64 @@ class FileOrganizerApp(QMainWindow):
 
         return "Unknown"
 
+    def load_undo_history(self):
+        if not os.path.exists(self.undo_file):
+            return []
+
+        try:
+            with open(self.undo_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Novo formato
+            if isinstance(data, dict) and "history" in data:
+                return data.get("history", [])
+
+            # Compatibilidade com undo antigo
+            if isinstance(data, dict):
+                return [{
+                    "type": data.get("type", "organize"),
+                    "timestamp": data.get("timestamp", ""),
+                    "moves": data.get("moves", data),
+                    "created_dirs": data.get("created_dirs", []),
+                    "deleted_dirs": data.get("deleted_dirs", [])
+                }]
+
+        except Exception:
+            pass
+
+        return []
+
+    def save_undo_history(self, history):
+        if history:
+            undo_dir = os.path.dirname(self.undo_file)
+            if undo_dir:
+                os.makedirs(undo_dir, exist_ok=True)
+
+            with open(self.undo_file, "w", encoding="utf-8") as f:
+                json.dump({"history": history}, f, indent=2)
+        else:
+            if os.path.exists(self.undo_file):
+                os.remove(self.undo_file)
+
+    def add_undo_action(self, action_type, moves, created_dirs=None, deleted_dirs=None):
+        created_dirs = list(dict.fromkeys(created_dirs or []))
+        deleted_dirs = list(dict.fromkeys(deleted_dirs or []))
+
+        if not moves and not created_dirs and not deleted_dirs:
+            return
+
+        history = self.load_undo_history()
+
+        history.append({
+            "type": action_type,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "moves": moves,
+            "created_dirs": created_dirs,
+            "deleted_dirs": deleted_dirs
+        })
+
+        self.save_undo_history(history)
+
     # ==========================================
     # UI PRINCIPAL
     # ==========================================
@@ -1629,6 +1687,8 @@ class FileOrganizerApp(QMainWindow):
     def _task_find_duplicates(self, src):
         dupes_folder = os.path.join(src, "Duplicates")
         moved = 0
+        moves_dict = {}
+        created_dirs = []        
 
         try:
             size_dict = {}
@@ -1673,18 +1733,22 @@ class FileOrganizerApp(QMainWindow):
                         full_hash = self.hash_file_full(filepath)
 
                         if full_hash in full_hashes:
-                            if not os.path.exists(dupes_folder):
-                                os.makedirs(dupes_folder, exist_ok=True)
+                            self.ensure_dir(dupes_folder, created_dirs)
 
                             file = os.path.basename(filepath)
                             safe_path = self.get_unique_path(dupes_folder, file, filepath)
                             self.force_move(filepath, safe_path)
+
+                            moves_dict[safe_path] = filepath
                             moved += 1
                         else:
                             full_hashes[full_hash] = filepath
 
                     except Exception:
                         pass
+
+            if moved > 0:
+                self.add_undo_action("duplicates", moves_dict, created_dirs, [])
 
         finally:
             self.safe_ui(self.finish_operation)
@@ -1708,12 +1772,16 @@ class FileOrganizerApp(QMainWindow):
         restored = 0
 
         try:
-            with open(self.undo_file, "r", encoding="utf-8") as f:
-                log_data = json.load(f)
+            history = self.load_undo_history()
 
-            moves = log_data.get("moves", log_data)
-            created_dirs = log_data.get("created_dirs", [])
-            deleted_dirs = log_data.get("deleted_dirs", [])
+            if not history:
+                return
+
+            last_action = history.pop()
+
+            moves = last_action.get("moves", {})
+            created_dirs = last_action.get("created_dirs", [])
+            deleted_dirs = last_action.get("deleted_dirs", [])
 
             for d in deleted_dirs:
                 try:
@@ -1732,10 +1800,11 @@ class FileOrganizerApp(QMainWindow):
                         pass
 
             created_dirs.sort(key=len, reverse=True)
+
             for d in created_dirs:
                 self.remove_empty_folders(d, remove_root=True)
 
-            os.remove(self.undo_file)
+            self.save_undo_history(history)
 
         finally:
             self.safe_ui(self.finish_operation)
@@ -1816,9 +1885,6 @@ class FileOrganizerApp(QMainWindow):
         moves_dict = {}
         created_dirs = []
         reserved_paths = set()
-
-        if not simulate and os.path.exists(self.undo_file):
-            os.remove(self.undo_file)
 
         try:
             for filepath in file_iterator:
@@ -1989,14 +2055,7 @@ class FileOrganizerApp(QMainWindow):
                 created_dirs = list(dict.fromkeys(created_dirs))
                 deleted_dirs = list(dict.fromkeys(deleted_dirs))
 
-                log_data = {
-                    "moves": moves_dict,
-                    "created_dirs": created_dirs,
-                    "deleted_dirs": deleted_dirs
-                }
-
-                with open(self.undo_file, "w", encoding="utf-8") as f:
-                    json.dump(log_data, f)
+                self.add_undo_action("organize", moves_dict, created_dirs, deleted_dirs)
 
                 self.safe_ui(self.finish_operation)
                 self.safe_ui(lambda: QTimer.singleShot(200, lambda: self.show_info("Success", t["msg_success"].format(moved_count), self)))
