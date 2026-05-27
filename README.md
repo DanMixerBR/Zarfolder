@@ -27,13 +27,13 @@
 ## 📸 Screenshots
 
 <p align="center">
-  <img width="50%" height="702" alt="image" src="https://github.com/user-attachments/assets/2ff2b2ae-7706-48da-b4b8-1ed5a976583a" />
+  <img width="50%" height="702" alt="image" src="https://github.com/user-attachments/assets/13e65e76-9400-49e7-a8f0-15d388261647" />
   <br>
   <em>Light Theme.</em>
 </p>
 
 <p align="center">
-  <img width="50%" height="702" alt="image" src="https://github.com/user-attachments/assets/06ac8f8a-1cfe-4e1c-ba29-e82d09002314" />
+  <img width="50%" height="702" alt="image" src="https://github.com/user-attachments/assets/a8b4cafe-8dad-4906-abec-1c477faa983d" />
   <br>
   <em>Dark Theme.</em>
 </p>
