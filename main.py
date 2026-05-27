@@ -13,7 +13,7 @@ import ctypes
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QSize, QTimer, QObject, Signal, Slot
-from PySide6.QtGui import QIcon, QPixmap, QFont
+from PySide6.QtGui import QIcon, QPixmap, QFont, QImageReader
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -36,6 +36,16 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QSizePolicy
 )
+
+try:
+    from mutagen import File as MutagenFile
+except Exception:
+    MutagenFile = None
+
+try:
+    from pymediainfo import MediaInfo
+except Exception:
+    MediaInfo = None
 
 # ==========================================
 # GLOBAL PATH FIX (LINUX/WINDOWS)
@@ -117,6 +127,7 @@ LANGS = {
         "s1": "1. Select Folder to Organize", "browse": "Browse", "ph_src": "Choose the messy folder...",
         "s2": "2. Automatic Classification (Check to enable)",
         "t_type": "Type (Videos, Music...)", "t_date_c": "Creation Date", "t_date_m": "Modified Date", "t_size": "Size (Small, Med...)", "t_name": "Name (A-Z)",
+        "t_ext": "Extension", "t_resolution": "Resolution", "t_codec": "Codec", "t_artist": "Artist", "t_album": "Album",
         "s3": "3. Define Organization Rules (Optional)", "add_rule": "+ Add Rule",
         "btn_run": "Organize", "btn_sim": "Simulate", "btn_undo": "Undo Last", "btn_dupes": "Find Dupes",
         "r_name": "Name contains", "r_name_not": "Name does NOT contain",
@@ -348,8 +359,8 @@ class FileOrganizerApp(QMainWindow):
             }}
 
             QPushButton#DangerButton {{
-                background-color: {danger};
-                color: white;
+                background-color: {bg_input};
+                color: {text};
                 font-weight: 700;
                 border-radius: 8px;
                 padding: 0px;
@@ -358,7 +369,8 @@ class FileOrganizerApp(QMainWindow):
             }}
 
             QPushButton#DangerButton:hover {{
-                background-color: {danger_hover};
+                color: white;
+                background-color: {danger};
             }}
 
             QMessageBox QPushButton {{
@@ -751,17 +763,30 @@ class FileOrganizerApp(QMainWindow):
         self.chk_date_m = QCheckBox("")
         self.chk_size = QCheckBox("")
         self.chk_name = QCheckBox("")
+        self.chk_ext = QCheckBox("")
+        self.chk_resolution = QCheckBox("")
+        self.chk_codec = QCheckBox("")
+        self.chk_artist = QCheckBox("")
+        self.chk_album = QCheckBox("")
 
-        chk_grid.addWidget(self.chk_type, 0, 0)
-        chk_grid.addWidget(self.chk_date_c, 0, 1)
-        chk_grid.addWidget(self.chk_date_m, 0, 2)
-        chk_grid.addWidget(self.chk_size, 1, 0)
-        chk_grid.addWidget(self.chk_name, 1, 1)
+        chk_grid.addWidget(self.chk_type, 0, 0, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_date_c, 0, 1, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_date_m, 1, 1, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_ext, 1, 2, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_resolution, 0, 4, alignment=Qt.AlignLeft)
+
+        chk_grid.addWidget(self.chk_size, 1, 0, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_name, 0, 2, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_codec, 1, 4, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_artist, 0, 3, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_album, 1, 3, alignment=Qt.AlignLeft)
         
         chk_grid.setColumnStretch(0, 0)
         chk_grid.setColumnStretch(1, 0)
         chk_grid.setColumnStretch(2, 0)
-        chk_grid.setColumnStretch(3, 1)
+        chk_grid.setColumnStretch(3, 0)
+        chk_grid.setColumnStretch(4, 0)
+        chk_grid.setColumnStretch(5, 1)
 
         auto_layout.addLayout(chk_grid)
         main_layout.addWidget(auto_frame)
@@ -861,6 +886,11 @@ class FileOrganizerApp(QMainWindow):
         self.chk_date_m.setText(t["t_date_m"])
         self.chk_size.setText(t["t_size"])
         self.chk_name.setText(t["t_name"])
+        self.chk_ext.setText(t.get("t_ext", "Extension"))
+        self.chk_resolution.setText(t.get("t_resolution", "Resolution"))
+        self.chk_codec.setText(t.get("t_codec", "Codec"))
+        self.chk_artist.setText(t.get("t_artist", "Artist"))
+        self.chk_album.setText(t.get("t_album", "Album"))
 
         self.lbl_s3.setText(t["s3"])
         self.btn_add_rule.setText(t["add_rule"])
@@ -1735,7 +1765,12 @@ class FileOrganizerApp(QMainWindow):
             "date_c": self.chk_date_c.isChecked(),
             "date_m": self.chk_date_m.isChecked(),
             "size": self.chk_size.isChecked(),
-            "name": self.chk_name.isChecked()
+            "name": self.chk_name.isChecked(),
+            "ext": self.chk_ext.isChecked(),
+            "resolution": self.chk_resolution.isChecked(),
+            "codec": self.chk_codec.isChecked(),
+            "artist": self.chk_artist.isChecked(),
+            "album": self.chk_album.isChecked()
         }
 
         has_auto = any(auto_opts.values())
@@ -1902,6 +1937,21 @@ class FileOrganizerApp(QMainWindow):
 
                     if auto_opts["name"]:
                         sub_paths.append(self.get_name_category(file))
+                        
+                    if auto_opts["ext"]:
+                        sub_paths.append(self.get_extension_category(file))
+
+                    if auto_opts["resolution"]:
+                        sub_paths.append(self.get_resolution_category(filepath))
+
+                    if auto_opts["codec"]:
+                        sub_paths.append(self.get_codec_category(filepath))
+
+                    if auto_opts["artist"]:
+                        sub_paths.append(self.get_artist_category(filepath))
+
+                    if auto_opts["album"]:
+                        sub_paths.append(self.get_album_category(filepath))                        
 
                     target_path = os.path.join(src, *sub_paths)
                     safe_new_path = self.get_unique_path(target_path, file, filepath)
@@ -2033,6 +2083,111 @@ class FileOrganizerApp(QMainWindow):
         self.apply_titlebar_theme(sim_win)
         sim_win.show()
         self.center_window(sim_win, 650, 500)
+
+    def safe_folder_part(self, value, fallback="Unknown"):
+        value = str(value or "").strip()
+
+        if not value:
+            value = fallback
+
+        value = "".join(c for c in value if c not in r'\/:*?"<>|')
+        value = value.strip().strip(".")
+
+        return value[:80] if value else fallback
+
+    def get_extension_category(self, filename):
+        ext = os.path.splitext(filename)[1].lower().strip(".")
+
+        if not ext:
+            return "No Extension"
+
+        return self.safe_folder_part(ext.upper(), "No Extension")
+
+    def get_resolution_category(self, filepath):
+        ext = os.path.splitext(filepath)[1].lower()
+
+        try:
+            if ext in IMAGE_EXTENSIONS:
+                reader = QImageReader(filepath)
+                size = reader.size()
+
+                if size.isValid():
+                    return self.safe_folder_part(f"{size.width()}x{size.height()}", "Unknown Resolution")
+
+            if ext in VIDEO_EXTENSIONS and MediaInfo is not None:
+                media_info = MediaInfo.parse(filepath)
+
+                for track in media_info.tracks:
+                    if track.track_type == "Video" and track.width and track.height:
+                        height = int(track.height)
+
+                        if height >= 2160:
+                            return "4K"
+                        if height >= 1440:
+                            return "1440p"
+                        if height >= 1080:
+                            return "1080p"
+                        if height >= 720:
+                            return "720p"
+                        if height >= 480:
+                            return "480p"
+
+                        return self.safe_folder_part(f"{track.width}x{track.height}", "Unknown Resolution")
+        except Exception:
+            pass
+
+        return "Unknown Resolution"
+
+    def get_codec_category(self, filepath):
+        ext = os.path.splitext(filepath)[1].lower()
+
+        if ext not in VIDEO_EXTENSIONS and ext not in AUDIO_EXTENSIONS:
+            return "Unknown Codec"
+
+        if MediaInfo is None:
+            return "Unknown Codec"
+
+        try:
+            media_info = MediaInfo.parse(filepath)
+
+            for track in media_info.tracks:
+                if track.track_type in ("Video", "Audio"):
+                    codec = track.format or track.codec_id or track.commercial_name
+
+                    if codec:
+                        return self.safe_folder_part(codec, "Unknown Codec")
+        except Exception:
+            pass
+
+        return "Unknown Codec"
+
+    def get_audio_tag(self, filepath, tag_name):
+        ext = os.path.splitext(filepath)[1].lower()
+
+        if ext not in AUDIO_EXTENSIONS:
+            return "Unknown"
+
+        if MutagenFile is None:
+            return "Unknown"
+
+        try:
+            audio = MutagenFile(filepath, easy=True)
+
+            if audio and audio.tags:
+                values = audio.tags.get(tag_name)
+
+                if values:
+                    return self.safe_folder_part(values[0], "Unknown")
+        except Exception:
+            pass
+
+        return "Unknown"
+
+    def get_artist_category(self, filepath):
+        return self.get_audio_tag(filepath, "artist")
+
+    def get_album_category(self, filepath):
+        return self.get_audio_tag(filepath, "album")
 
     # ==========================================
     # CLASSIFICAÇÃO
