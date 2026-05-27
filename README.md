@@ -2,7 +2,7 @@
   <img src="assets/logo_original.png" alt="CopynDown Logo" width="150">
   <h1>Zarfolder</h1>
   <p>
-    <a href="https://github.com/DanMixerBR/Zarfolder/releases/latest"><img src="https://img.shields.io/badge/version-1.0.6-orange.svg?style=for-the-badge"></a>
+    <a href="https://github.com/DanMixerBR/Zarfolder/releases/latest"><img src="https://img.shields.io/badge/version-1.0.7-orange.svg?style=for-the-badge"></a>
     <a href="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-orange.svg"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-orange.svg?style=for-the-badge"></a>
     <a href="https://www.python.org/downloads/release/python-3120/"><img src="https://img.shields.io/badge/Python-3.12-orange.svg?style=for-the-badge&logo=python&logoColor=white"></a>
     <br>
