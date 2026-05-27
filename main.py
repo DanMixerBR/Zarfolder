@@ -773,13 +773,13 @@ class FileOrganizerApp(QMainWindow):
         chk_grid.addWidget(self.chk_date_c, 0, 1, alignment=Qt.AlignLeft)
         chk_grid.addWidget(self.chk_date_m, 1, 1, alignment=Qt.AlignLeft)
         chk_grid.addWidget(self.chk_ext, 1, 2, alignment=Qt.AlignLeft)
-        chk_grid.addWidget(self.chk_resolution, 0, 4, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_resolution, 0, 3, alignment=Qt.AlignLeft)
 
         chk_grid.addWidget(self.chk_size, 1, 0, alignment=Qt.AlignLeft)
         chk_grid.addWidget(self.chk_name, 0, 2, alignment=Qt.AlignLeft)
-        chk_grid.addWidget(self.chk_codec, 1, 4, alignment=Qt.AlignLeft)
-        chk_grid.addWidget(self.chk_artist, 0, 3, alignment=Qt.AlignLeft)
-        chk_grid.addWidget(self.chk_album, 1, 3, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_codec, 1, 3, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_artist, 0, 4, alignment=Qt.AlignLeft)
+        chk_grid.addWidget(self.chk_album, 1, 4, alignment=Qt.AlignLeft)
         
         chk_grid.setColumnStretch(0, 0)
         chk_grid.setColumnStretch(1, 0)
