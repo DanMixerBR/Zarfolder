@@ -707,17 +707,17 @@ class FileOrganizerApp(QMainWindow):
         title_layout.addWidget(self.lbl_sub)
         title_layout.addStretch()
 
-        self.btn_about = QPushButton("")
-        self.btn_about.setFixedSize(100, 35)
-        self.set_button_icon(self.btn_about, "info.svg", 16)
-        self.btn_about.clicked.connect(self.show_about)
-        title_layout.addWidget(self.btn_about)
-
         self.btn_settings = QPushButton("")
         self.btn_settings.setFixedSize(100, 35)
         self.set_button_icon(self.btn_settings, "settings.svg", 16)
         self.btn_settings.clicked.connect(self.show_settings)
         title_layout.addWidget(self.btn_settings)
+
+        self.btn_about = QPushButton("")
+        self.btn_about.setFixedSize(100, 35)
+        self.set_button_icon(self.btn_about, "info.svg", 16)
+        self.btn_about.clicked.connect(self.show_about)
+        title_layout.addWidget(self.btn_about)
 
         main_layout.addWidget(title_frame)
 
@@ -1592,7 +1592,7 @@ class FileOrganizerApp(QMainWindow):
 
         return hasher.hexdigest()
 
-    def get_unique_path(self, dest_folder, filename, original_filepath):
+    def get_unique_path(self, dest_folder, filename, original_filepath, reserved_paths=None):
         base, ext = os.path.splitext(filename)
         counter = 1
         new_path = os.path.join(dest_folder, filename)
@@ -1600,9 +1600,14 @@ class FileOrganizerApp(QMainWindow):
         if original_filepath == new_path:
             return new_path
 
-        while os.path.exists(new_path):
+        if reserved_paths is None:
+            reserved_paths = set()
+
+        while os.path.exists(new_path) or new_path in reserved_paths:
             new_path = os.path.join(dest_folder, f"{base} ({counter}){ext}")
             counter += 1
+
+        reserved_paths.add(new_path)
 
         return new_path
 
@@ -1801,6 +1806,8 @@ class FileOrganizerApp(QMainWindow):
         moved_count = 0
         sim_moves = []
         sim_moves_limit = self.SIMULATION_PREVIEW_LIMIT
+        self._media_info_cache = {}
+        self._audio_tags_cache = {}
 
         def add_sim_move(file_name, destination):
             if len(sim_moves) < sim_moves_limit:
@@ -1808,6 +1815,7 @@ class FileOrganizerApp(QMainWindow):
 
         moves_dict = {}
         created_dirs = []
+        reserved_paths = set()
 
         if not simulate and os.path.exists(self.undo_file):
             os.remove(self.undo_file)
@@ -1902,7 +1910,7 @@ class FileOrganizerApp(QMainWindow):
 
                 if final_dest:
                     dest_folder = os.path.join(src, final_dest)
-                    safe_new_path = self.get_unique_path(dest_folder, file, filepath)
+                    safe_new_path = self.get_unique_path(dest_folder, file, filepath, reserved_paths)
 
                     if simulate:
                         add_sim_move(file, safe_new_path)
@@ -1954,7 +1962,7 @@ class FileOrganizerApp(QMainWindow):
                         sub_paths.append(self.get_album_category(filepath))                        
 
                     target_path = os.path.join(src, *sub_paths)
-                    safe_new_path = self.get_unique_path(target_path, file, filepath)
+                    safe_new_path = self.get_unique_path(target_path, file, filepath, reserved_paths)
 
                     if simulate:
                         add_sim_move(file, safe_new_path)
@@ -1995,7 +2003,13 @@ class FileOrganizerApp(QMainWindow):
 
         except Exception as e:
             self.safe_ui(self.finish_operation)
-            print(f"Erro Crítico: {e}")
+            print(f"Error: {e}")
+        finally:
+            if hasattr(self, "_media_info_cache"):
+                self._media_info_cache.clear()
+
+            if hasattr(self, "_audio_tags_cache"):
+                self._audio_tags_cache.clear()
 
     def _generate_tree_and_finish(self, src, sim_moves):
         self.finish_operation()
@@ -2006,6 +2020,8 @@ class FileOrganizerApp(QMainWindow):
 
         self.simulation_win = QDialog(self)
         sim_win = self.simulation_win
+        sim_win.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        sim_win.destroyed.connect(lambda: setattr(self, "simulation_win", None))
         sim_win.setWindowTitle(t["btn_sim"])
         sim_win.resize(650, 500)
         sim_win.setMinimumSize(650, 500)
@@ -2076,7 +2092,12 @@ class FileOrganizerApp(QMainWindow):
                 else:
                     parent_item.addChild(item)
 
-        populate_tree(None, tree)
+        tree_widget.setUpdatesEnabled(False)
+
+        try:
+            populate_tree(None, tree)
+        finally:
+            tree_widget.setUpdatesEnabled(True)
 
         layout.addWidget(container, 1)
         self.apply_clickable_cursors(sim_win)
@@ -2103,6 +2124,75 @@ class FileOrganizerApp(QMainWindow):
 
         return self.safe_folder_part(ext.upper(), "No Extension")
 
+    def get_media_info_cached(self, filepath):
+        if not hasattr(self, "_media_info_cache"):
+            self._media_info_cache = {}
+
+        if filepath in self._media_info_cache:
+            return self._media_info_cache[filepath]
+
+        if MediaInfo is None:
+            self._media_info_cache[filepath] = None
+            return None
+
+        try:
+            info = MediaInfo.parse(filepath)
+            self._media_info_cache[filepath] = info
+            return info
+        except Exception:
+            self._media_info_cache[filepath] = None
+            return None
+
+    def is_close_to(self, value, targets, tolerance=16):
+        value = int(value)
+
+        for target in targets:
+            if abs(value - int(target)) <= tolerance:
+                return True
+
+        return False
+
+    def get_resolution_bucket(self, width, height, kind="video"):
+        width = int(width)
+        height = int(height)
+
+        short_side = min(width, height)
+        long_side = max(width, height)
+
+        if kind == "image":
+            megapixels = (width * height) / 1_000_000
+
+            if megapixels < 1:
+                return "Under 1MP"
+
+            if megapixels < 3:
+                return "1MP-3MP"
+
+            if megapixels < 8:
+                return "3MP-8MP"
+
+            if megapixels < 16:
+                return "8MP-16MP"
+
+            return "Over 16MP"
+
+        if self.is_close_to(long_side, (3840, 3996, 4096), tolerance=32) and short_side >= 1000:
+            return "4K"
+
+        if self.is_close_to(short_side, (1440,), tolerance=16) and long_side >= 1900:
+            return "1440p"
+
+        if self.is_close_to(short_side, (1080,), tolerance=16) and long_side >= 1440:
+            return "1080p"
+
+        if self.is_close_to(short_side, (720,), tolerance=16) and long_side >= 900:
+            return "720p"
+
+        if self.is_close_to(short_side, (480,), tolerance=16) and long_side >= 480:
+            return "480p"
+
+        return self.safe_folder_part(f"Custom {width}x{height}", "Unknown Resolution")
+
     def get_resolution_category(self, filepath):
         ext = os.path.splitext(filepath)[1].lower()
 
@@ -2112,27 +2202,24 @@ class FileOrganizerApp(QMainWindow):
                 size = reader.size()
 
                 if size.isValid():
-                    return self.safe_folder_part(f"{size.width()}x{size.height()}", "Unknown Resolution")
+                    width = int(size.width())
+                    height = int(size.height())
+
+                    return self.get_resolution_bucket(width, height, kind="image")
 
             if ext in VIDEO_EXTENSIONS and MediaInfo is not None:
-                media_info = MediaInfo.parse(filepath)
+                media_info = self.get_media_info_cached(filepath)
+
+                if media_info is None:
+                    return "Unknown Resolution"
 
                 for track in media_info.tracks:
                     if track.track_type == "Video" and track.width and track.height:
+                        width = int(track.width)
                         height = int(track.height)
 
-                        if height >= 2160:
-                            return "4K"
-                        if height >= 1440:
-                            return "1440p"
-                        if height >= 1080:
-                            return "1080p"
-                        if height >= 720:
-                            return "720p"
-                        if height >= 480:
-                            return "480p"
+                        return self.get_resolution_bucket(width, height, kind="video")
 
-                        return self.safe_folder_part(f"{track.width}x{track.height}", "Unknown Resolution")
         except Exception:
             pass
 
@@ -2148,7 +2235,10 @@ class FileOrganizerApp(QMainWindow):
             return "Unknown Codec"
 
         try:
-            media_info = MediaInfo.parse(filepath)
+            media_info = self.get_media_info_cached(filepath)
+
+            if media_info is None:
+                return "Unknown Codec"
 
             for track in media_info.tracks:
                 if track.track_type in ("Video", "Audio"):
@@ -2161,25 +2251,34 @@ class FileOrganizerApp(QMainWindow):
 
         return "Unknown Codec"
 
-    def get_audio_tag(self, filepath, tag_name):
+    def get_audio_tags_cached(self, filepath):
+        if not hasattr(self, "_audio_tags_cache"):
+            self._audio_tags_cache = {}
+
+        if filepath in self._audio_tags_cache:
+            return self._audio_tags_cache[filepath]
+
         ext = os.path.splitext(filepath)[1].lower()
 
-        if ext not in AUDIO_EXTENSIONS:
-            return "Unknown"
-
-        if MutagenFile is None:
-            return "Unknown"
+        if ext not in AUDIO_EXTENSIONS or MutagenFile is None:
+            return {}
 
         try:
             audio = MutagenFile(filepath, easy=True)
+            tags = dict(audio.tags) if audio and audio.tags else {}
 
-            if audio and audio.tags:
-                values = audio.tags.get(tag_name)
-
-                if values:
-                    return self.safe_folder_part(values[0], "Unknown")
+            self._audio_tags_cache[filepath] = tags
+            return tags
         except Exception:
-            pass
+            self._audio_tags_cache[filepath] = {}
+            return {}
+
+    def get_audio_tag(self, filepath, tag_name):
+        tags = self.get_audio_tags_cached(filepath)
+        values = tags.get(tag_name)
+
+        if values:
+            return self.safe_folder_part(values[0], "Unknown")
 
         return "Unknown"
 
