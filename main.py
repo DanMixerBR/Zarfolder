@@ -927,6 +927,9 @@ class FileOrganizerApp(QMainWindow):
         return frame
 
     def update_texts(self):
+        if self.current_lang not in LANGS:
+            self.current_lang = "en"
+
         t = LANGS[self.current_lang]
 
         self.lbl_title.setText(t["title"])
@@ -1466,6 +1469,12 @@ class FileOrganizerApp(QMainWindow):
                     self.current_theme = cfg.get("theme", "Light")
             except Exception:
                 pass
+
+        if self.current_lang not in LANGS:
+            self.current_lang = "en"
+
+        if self.current_theme not in ("Light", "Dark"):
+            self.current_theme = "Light"
 
     def native_askdirectory(self, title="Choose Directory"):
         if self.is_windows:
