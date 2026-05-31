@@ -1009,28 +1009,43 @@ class FileOrganizerApp(QMainWindow):
         set_win.setFixedSize(400, 300)
         set_win.setWindowModality(Qt.ApplicationModal)
         self.apply_window_icon(set_win)
+        t = LANGS[self.current_lang]        
 
         layout = QVBoxLayout(set_win)
         layout.setContentsMargins(40, 20, 40, 25)
         layout.setSpacing(18)
 
-        title = QLabel(LANGS[self.current_lang]["settings"])
+        title = QLabel(t["settings"])
         title.setFont(QFont("Segoe UI", 14, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
         layout.addSpacing(20)
 
         master_lang_map = {
-            "en": "English", "pt": "Português", "es": "Español",
-            "fr": "Français", "de": "Deutsch", "it": "Italiano",
-            "ja": "日本語", "ko": "한국어", "ru": "Русский"
+            "en": "English",
+            "id": "Bahasa Indonesia",
+            "de": "Deutsch",
+            "es": "Español",
+            "fr": "Français",
+            "it": "Italiano",
+            "nl": "Nederlands",
+            "pl": "Polski",
+            "pt": "Português",
+            "tr": "Türkçe",
+            "vi": "Tiếng Việt",
+            "ru": "Русский",
+            "th": "ไทย",
+            "ja": "日本語",
+            "ko": "한국어",
+            "zh_cn": "中文（简体）",
+            "zh_tw": "中文（繁體）"
         }
 
-        lang_map = {k: master_lang_map[k] for k in LANGS.keys() if k in master_lang_map}
+        lang_map = {k: name for k, name in master_lang_map.items() if k in LANGS}
         rev_lang_map = {v: k for k, v in lang_map.items()}
 
         lang_row = QHBoxLayout()
-        lang_row.addWidget(QLabel("Language:"))
+        lang_row.addWidget(QLabel(t.get("settings_language", "Language") + ":"))
         lang_row.addStretch()
         lang_menu = QComboBox()
         lang_menu.addItems(list(lang_map.values()))
@@ -1041,7 +1056,7 @@ class FileOrganizerApp(QMainWindow):
         layout.addLayout(lang_row)
 
         theme_row = QHBoxLayout()
-        theme_row.addWidget(QLabel("Theme:"))
+        theme_row.addWidget(QLabel(t.get("settings_theme", "Theme") + ":"))
         theme_row.addStretch()
         theme_menu = QComboBox()
         theme_menu.addItems(["Dark", "Light"])
@@ -1052,7 +1067,7 @@ class FileOrganizerApp(QMainWindow):
 
         layout.addStretch()
 
-        btn_save = QPushButton("Save")
+        btn_save = QPushButton(t.get("settings_save", "Save"))
         btn_save.setObjectName("PrimaryButton")
         btn_save.setFixedWidth(140)
         btn_save.setFixedHeight(35)
@@ -1090,8 +1105,9 @@ class FileOrganizerApp(QMainWindow):
 
     def show_about(self):
         self.fix_ghost_cursor()
+        t = LANGS[self.current_lang]        
         self.about_win = QDialog(self)
-        self.about_win.setWindowTitle(LANGS[self.current_lang].get("about", "About"))
+        self.about_win.setWindowTitle(t.get("about", "About"))
         self.about_win.setFixedSize(640, 500)
         self.about_win.setWindowModality(Qt.ApplicationModal)
         self.apply_window_icon(self.about_win)
@@ -1122,19 +1138,37 @@ class FileOrganizerApp(QMainWindow):
 
         content_layout.addSpacing(10)
 
-        dev = QLabel("Developed by DanMixerBR")
+        dev = QLabel(t.get("developed_by", "Developed by DanMixerBR"))
         dev.setFont(QFont("Segoe UI", 12, QFont.Bold))
         content_layout.addWidget(dev)
 
-        content_layout.addSpacing(30)
+        content_layout.addSpacing(25)
 
-        desc_text = LANGS[self.current_lang].get("desc", "")
+        desc_text = t.get("desc", "")
         desc = QLabel(desc_text)
         desc.setWordWrap(True)
         desc.setFont(QFont("Segoe UI", 10))
         content_layout.addWidget(desc)
-        
-        content_layout.addSpacing(30)
+
+        content_layout.addSpacing(25)
+
+        credits = QLabel(t.get("credits_license", "Credits & License"))
+        credits.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        content_layout.addWidget(credits)
+
+        built_text = (
+            t.get("built_with", "Built with:") + "\n\n"
+            + "• Python\n"
+            + "• PySide6\n"
+            + "• Mutagen\n"
+            + "• MediaInfo\n\n"
+            + t.get("mit_license", "This software is distributed under the MIT License.")
+        )
+
+        built = QLabel(built_text)
+        built.setWordWrap(True)
+        built.setFont(QFont("Segoe UI", 10))
+        content_layout.addWidget(built)
 
         self.update_status_lbl = QLabel("")
         self.update_status_lbl.setObjectName("MutedLabel")
@@ -1155,14 +1189,14 @@ class FileOrganizerApp(QMainWindow):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        btn_github = QPushButton("GitHub")
+        btn_github = QPushButton(" GitHub")
         btn_github.setFixedWidth(120)
         btn_github.setFixedHeight(35)
         self.set_button_icon(btn_github, "github.svg", 16)
         btn_github.clicked.connect(lambda: webbrowser.open_new("https://github.com/DanMixerBR/Zarfolder"))
         btn_row.addWidget(btn_github)
 
-        self.btn_update_app = QPushButton(LANGS[self.current_lang].get("btn_update", "Check for updates"))
+        self.btn_update_app = QPushButton(t.get("btn_update", "Check for updates"))
         self.btn_update_app.setObjectName("PrimaryButton")
         self.btn_update_app.setFixedWidth(160)
         self.btn_update_app.setFixedHeight(35)
@@ -2091,7 +2125,7 @@ class FileOrganizerApp(QMainWindow):
         layout.setContentsMargins(20, 15, 20, 20)
         layout.setSpacing(12)
 
-        title = QLabel("Preview of Organized Folders")
+        title = QLabel(t.get("sim_preview_title", "Preview of Organized Folders"))
         title.setFont(QFont("Segoe UI", 14, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
