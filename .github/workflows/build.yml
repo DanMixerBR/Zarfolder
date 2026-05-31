@@ -68,6 +68,9 @@ jobs:
           # 3. Copiar os Assets e Gerar o version.txt na pasta core/bin
           Copy-Item -Path bin\* -Destination release\core\bin -Recurse
           Copy-Item -Path assets\icon.ico -Destination release\core\bin\icons\icon.ico
+          Copy-Item -Path LICENSE -Destination release\core\LICENSE.txt
+          Copy-Item -Path THIRD_PARTY_LICENSES.txt -Destination release\core\THIRD_PARTY_LICENSES.txt
+          Copy-Item -Path NOTICE.txt -Destination release\core\NOTICE.txt
           $CLEAN_V = ("${{ github.event.inputs.versao_tag }}" -replace '[A-Za-z]', '')
           Set-Content -Path release\core\bin\version.txt -Value $CLEAN_V
           
@@ -95,7 +98,10 @@ jobs:
           
           # 3. Copiar os Assets e Gerar o version.txt
           cp -r bin/* release/core/bin/
-          cp assets/icon.png release/core/bin/icons/icon.png 2>/dev/null || true
+          cp assets/icon.png release/core/bin/icons/icon.png
+          cp LICENSE release/core/LICENSE.txt
+          cp THIRD_PARTY_LICENSES.txt release/core/THIRD_PARTY_LICENSES.txt
+          cp NOTICE.txt release/core/NOTICE.txt
           echo "${{ github.event.inputs.versao_tag }}" | tr -d 'A-Za-z' > release/core/bin/version.txt
           
           # 4. Adicionar o script de instalação Linux e Zipar
