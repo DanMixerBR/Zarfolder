@@ -125,4 +125,4 @@ modification, are permitted provided that the conditions of the BSD-2-Clause
 license are met.
 
 For the full MediaInfoLib license text, visit:
-https://github.com/MediaArea/MediaInfoLib/blob/master/License.html
+https://github.com/MediaArea/MediaInfoLib/blob/master/LICENSE
