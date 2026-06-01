@@ -608,6 +608,52 @@ class FileOrganizerApp(QMainWindow):
         self.loading_window.show()
         self.center_window(self.loading_window, 350, 150)
 
+    def show_update_window(self, message="Checking for updates..."):
+        if self.loading_window:
+            self.hide_loading()
+
+        self.loading_window = QDialog(self)
+        self.loading_window.setWindowTitle("Update")
+        self.loading_window.setFixedSize(350, 150)
+        self.loading_window.setWindowModality(Qt.ApplicationModal)
+        self.apply_window_icon(self.loading_window)
+
+        layout = QVBoxLayout(self.loading_window)
+        layout.setContentsMargins(40, 0, 40, 0)
+        layout.setSpacing(0)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(20)
+
+        self.update_status_lbl = QLabel(message)
+        self.update_status_lbl.setAlignment(Qt.AlignCenter)
+        self.update_status_lbl.setFont(QFont("Segoe UI", 10))
+        self.update_status_lbl.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        content_layout.addWidget(self.update_status_lbl)
+
+        self.update_progress = QProgressBar()
+        self.update_progress.setRange(0, 100)
+        self.update_progress.setValue(0)
+        self.update_progress.setTextVisible(False)
+        self.update_progress.setFixedHeight(4)
+        self.update_progress.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        content_layout.addWidget(self.update_progress)
+
+        layout.addStretch(1)
+        layout.addWidget(content)
+        layout.addStretch(2)
+
+        self.apply_titlebar_theme(self.loading_window)
+        self.loading_window.show()
+        self.center_window(self.loading_window, 350, 150)
+
+    def hide_update_window(self):
+        self.hide_loading()
+        self.update_status_lbl = None
+        self.update_progress = None
+
     def hide_loading(self):
         win = self.loading_window
         self.loading_window = None
@@ -1025,9 +1071,9 @@ class FileOrganizerApp(QMainWindow):
         layout.addSpacing(20)
 
         master_lang_map = {
-            "en": "English",
             "id": "Bahasa Indonesia",
             "de": "Deutsch",
+            "en": "English",
             "es": "Español",
             "fr": "Français",
             "it": "Italiano",
@@ -1173,17 +1219,6 @@ class FileOrganizerApp(QMainWindow):
         built.setFont(QFont("Segoe UI", 10))
         content_layout.addWidget(built)
 
-        self.update_status_lbl = QLabel("")
-        self.update_status_lbl.setObjectName("MutedLabel")
-        content_layout.addWidget(self.update_status_lbl)
-
-        self.update_progress = QProgressBar()
-        self.update_progress.setRange(0, 100)
-        self.update_progress.setValue(0)
-        self.update_progress.setTextVisible(False)
-        self.update_progress.hide()
-        content_layout.addWidget(self.update_progress)
-
         content_layout.addStretch()
         scroll.setWidget(content)
 
@@ -1218,8 +1253,7 @@ class FileOrganizerApp(QMainWindow):
     # UPDATE
     # ==========================================
     def handle_update_failure(self, error_msg):
-        if self.update_status_lbl:
-            self.update_status_lbl.setText("Update Failed!")
+        self.hide_update_window()
 
         parent_win = self.about_win if self.about_win else self
         self.show_error("Update Error", error_msg, parent_win)
@@ -1236,12 +1270,7 @@ class FileOrganizerApp(QMainWindow):
         self.btn_update_app.setText("Checking...")
         self.is_updating = True
 
-        if self.update_progress:
-            self.update_progress.show()
-            self.update_progress.setValue(0)
-
-        if self.update_status_lbl:
-            self.update_status_lbl.setText("Checking for updates...")
+        self.show_update_window("Checking for updates...")
 
         threading.Thread(target=self.check_github_version_task, daemon=True).start()
 
@@ -1268,9 +1297,8 @@ class FileOrganizerApp(QMainWindow):
                 self.safe_ui(self.prompt_user_update, local_v, clean_remote_v)
             else:
                 self.is_updating = False
+                self.safe_ui(self.hide_update_window)
                 self.safe_ui(self.show_info, "Up to date", "You are already using the latest version.", self.about_win or self)
-                self.safe_ui(lambda: self.update_status_lbl.setText("") if self.update_status_lbl else None)
-                self.safe_ui(lambda: self.update_progress.hide() if self.update_progress else None)
                 self.safe_ui(self.set_button_enabled_text, self.btn_update_app, True, LANGS[self.current_lang].get("btn_update", "Check for updates"))
 
         except Exception as e:
@@ -1280,7 +1308,7 @@ class FileOrganizerApp(QMainWindow):
 
     def prompt_user_update(self, local_v, clean_remote_v):
         msg = f"Current version: {local_v}\nLatest version: {clean_remote_v}\n\nDo you want to update?"
-        parent_win = self.about_win or self
+        parent_win = self.loading_window or self.about_win or self
 
         if self.ask_yes_no("Update available", msg, parent_win):
             if self.update_status_lbl:
@@ -1289,12 +1317,7 @@ class FileOrganizerApp(QMainWindow):
             threading.Thread(target=self.download_and_install_task, daemon=True).start()
         else:
             self.is_updating = False
-
-            if self.update_status_lbl:
-                self.update_status_lbl.setText("Update cancelled.")
-
-            if self.update_progress:
-                self.update_progress.hide()
+            self.hide_update_window()
 
             if self.btn_update_app:
                 self.btn_update_app.setEnabled(True)
@@ -1408,6 +1431,8 @@ class FileOrganizerApp(QMainWindow):
             self.safe_ui(self.set_progress_fraction, 1.0)
 
             def finish_update_and_restart():
+                self.hide_update_window()
+
                 parent_win = self.about_win or self
                 self.show_info("Success", "Update Ready! The app will close to complete the update.", parent_win)
 
